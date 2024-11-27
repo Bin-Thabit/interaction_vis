@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Traffic Incident Analysis</title>
+    <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .visualizations {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-around;
+            width: 100%;
+            max-width: 1200px;
+        }
+        .chart {
+            margin: 20px;
+            width: 800px;
+        }
+
+        #subCont{
+            width: 100%;
+            display: flex;
+            justify-items: center;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Interactive Traffic Incident Analysis</h1>
+        <div class="visualizations">
+            <div id="main-vis" class="chart"></div>
+            <div id="subCont">
+                <div id="sub-vis-1" class="chart"></div>
+                <div id="sub-vis-2" class="chart"></div>
+            </div>
+            
+        </div>
+    </div>
+
+    <script>
+        const colorScale = {
+            "name": "color",
+            "type": "ordinal",
+            "domain": ["بسيط", "بليغ", "مركبات مخالفة", "حريق مركبة أثناء سيرها", "عبور شخص أو عدة أشخاص من مكان غير مخصص لعبور المشا"],
+            "range": {"scheme": "category10"}
+        };
+
+        const mainVisSpec = {
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 800,
+            "height": 400,
+            "padding": 5,
+            "signals": [
+                    {
+                        "name": "selectedCategory",
+                        "value": null,
+                        "on": [
+                            {
+                                "events": "symbol:click",
+                                "update": "datum.category"
+                            }
+                        ]
+                    }
+                ],
+            "data": [
+                {
+                    "name": "raw_data",
+                    "url": "https://raw.githubusercontent.com/sheriefAbdallah/CS318/refs/heads/main/Traffic_Incidents.csv",
+                    "format": {"type": "csv"}
+                },
+                
+                {
+                    "name": "filtered_data",
+                    "source": "raw_data",
+                    "transform": [
+                        {
+                            "type": "formula",
+                            "as": "category",
+                            "expr": "indexof(datum.acci_name, 'بسيط') >= 0 ? 'بسيط' : indexof(datum.acci_name, 'بليغ') >= 0 ? 'بليغ' : datum.acci_name === 'مركبات مخالفة' ? 'مركبات مخالفة' : datum.acci_name === 'حريق مركبة أثناء سيرها' ? 'حريق مركبة أثناء سيرها' : datum.acci_name === 'عبور شخص أو عدة أشخاص من مكان غير مخصص لعبور المشا' ? 'عبور شخص أو عدة أشخاص من مكان غير مخصص لعبور المشا' : null"
+                        },
+                        {
+                            "type": "formula",
+                            "as": "year",
+                            "expr": "substring(datum.acci_time, 6, 10)"
+                        },
+                        {
+                            "type": "filter",
+                            "expr": "datum.category !== null && (datum.year === '2023' || datum.year === '2024')"
+                        },
+                        {
+                            "type": "aggregate",
+                            "groupby": ["year", "category"],
+                            "ops": ["count"],
+                            "fields": [null],
+                            "as": ["count"]
+                        }
+                    ]
+                }
+            ],
+            "scales": [
+                {
+                    "name": "xscale",
+                    "type": "point",
+                    "domain": ["2023", "2024"],
+                    "range": [0, 800]
+                },
+                {
+                    "name": "yscale",
+                    "type": "sqrt",
+                    "domain": {"data": "filtered_data", "field": "count"},
+                    "range": [400, 0],
+                    "nice": true
+                },
+                colorScale
+            ],
+            "axes": [
+                {"orient": "bottom", "scale": "xscale", "title": "Year"}
+            ],
+            "legends": [
+                {
+                    "fill": "color",
+                    "title": "Type of Accidents",
+                    "orient": "top-left",
+                    "direction": "vertical"
+                }
+            ],
+            "marks": [
+                {
+                    "type": "group",
+                    "from": {
+                        "facet": {
+                            "name": "facet",
+                            "data": "filtered_data",
+                            "groupby": "category"
+                        }
+                    },
+                    "marks": [
+                        {
+                            "type": "line",
+                            "from": {"data": "facet"},
+                            "encode": {
+                                "enter": {
+                                    "x": {"scale": "xscale", "field": "year"},
+                                    "y": {"scale": "yscale", "field": "count"},
+                                    "stroke": {"scale": "color", "field": "category"},
+                                    "strokeWidth": {"value": 2}
+                                }
+                            }
+                        },
+                        {
+                            "type": "symbol",
+                            "from": {"data": "facet"},
+                            "encode": {
+                                "enter": {
+                                    "x": {"scale": "xscale", "field": "year"},
+                                    "y": {"scale": "yscale", "field": "count"},
+                                    "fill": {"scale": "color", "field": "category"},
+                                    "size": {"value": 200},
+                                    "tooltip": {"signal": "{'Category': datum.category, 'Year': datum.year, 'Accidents': datum.count}"}
+                                }
+                            }
+                        }
+                    ]
+                },
+                {
+                    "type": "rule",
+                    "encode": {
+                        "enter": {
+                            "x": {"scale": "xscale", "value": "2024"},
+                            "y": {"value": 0},
+                            "y2": {"field": {"group": "height"}},
+                            "stroke": {"value": "gray"},
+                            "strokeWidth": {"value": 1},
+                            "strokeDash": {"value": [4, 4]}
+                        }
+                    }
+                },
+                {
+                    "type": "rule",
+                    "encode": {
+                        "enter": {
+                            "x": {"scale": "xscale", "value": "2023"},
+                            "y": {"value": 0},
+                            "y2": {"field": {"group": "height"}},
+                            "stroke": {"value": "gray"},
+                            "strokeWidth": {"value": 1},
+                            "strokeDash": {"value": [4, 4]}
+                        }
+                    }
+                }
+            ]
+        };
+
+        const subVis1Spec = {
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 600,
+            "height": 400,
+            "padding": 1,
+            "data": [
+                {
+                    "name": "raw_data",
+                    "url": "https://raw.githubusercontent.com/sheriefAbdallah/CS318/refs/heads/main/Traffic_Incidents.csv",
+                    "format": {"type": "csv"}
+                },
+                {
+                    "name": "filtered_data",
+                    "source": "raw_data",
+                    "transform": [
+                        {
+                            "type": "formula",
+                            "as": "category",
+                            "expr": "indexof(datum.acci_name, 'بسيط') >= 0 ? 'بسيط' : indexof(datum.acci_name, 'بليغ') >= 0 ? 'بليغ' : datum.acci_name === 'مركبات مخالفة' ? 'مركبات مخالفة' : datum.acci_name === 'حريق مركبة أثناء سيرها' ? 'حريق مركبة أثناء سيرها' : datum.acci_name === 'عبور شخص أو عدة أشخاص من مكان غير مخصص لعبور المشا' ? 'عبور شخص أو عدة أشخاص من مكان غير مخصص لعبور المشا' : null"
+                        },
+                        {
+                            "type": "formula",
+                            "as": "month",
+                            "expr": "substring(datum.acci_time, 3, 5)"
+                        },
+                        {
+                            "type": "filter",
+                            "expr": "datum.category !== null && (datum.month === '03' || datum.month === '04') && substring(datum.acci_time, 6, 10) === '2023'"
+                        },
+                        {
+                            "type": "formula",
+                            "as": "label",
+                            "expr": "datum.month === '03' ? 'March' : 'April'"
+                        },
+                        {
+                            "type": "aggregate",
+                            "groupby": ["label", "category"],
+                            "ops": ["count"],
+                            "fields": [null],
+                            "as": ["count"]
+                        }
+                    ]
+                }
+            ],
+            "scales": [
+                {
+                    "name": "xscale",
+                    "type": "point",
+                    "domain": ["March", "April"],
+                    "range": [0, 500]
+                },
+                {
+                    "name": "yscale",
+                    "type": "sqrt",
+                    "domain": {"data": "filtered_data", "field": "count"},
+                    "range": [400, 0],
+                    "nice": true
+                },
+                colorScale
+            ],
+            "axes": [
+                {"orient": "bottom", "scale": "xscale", "title": "Month (2023)"}
+            ],
+            "legends": [
+                {
+                    "fill": "color",
+                    "title": "Type of Accidents",
+                    "orient": "top-left",
+                    "direction": "vertical"
+                }
+            ],
+            "marks": [
+                {
+                    "type": "group",
+                    "from": {
+                        "facet": {
+                            "name": "facet",
+                            "data": "filtered_data",
+                            "groupby": "category"
+                        }
+                    },
+                    "marks": [
+                        {
+                            "type": "line",
+                            "from": {"data": "facet"},
+                            "encode": {
+                                "enter": {
+                                    "x": {"scale": "xscale", "field": "label"},
+                                    "y": {"scale": "yscale", "field": "count"},
+                                    "stroke": {"scale": "color", "field": "category"},
+                                    "strokeWidth": {"value": 2}
+                                },
+                                "update": {
+                                    "opacity": {"signal": "datum.category === selectedCategory ? 1 : 0.1"}
+                                    }
+                            }
+                        },
+                        
+                        {
+                            "type": "symbol",
+                            "from": {"data": "facet"},
+                            "encode": {
+                                "enter": {
+                                    "x": {"scale": "xscale", "field": "label"},
+                                    "y": {"scale": "yscale", "field": "count"},
+                                    "fill": {"scale": "color", "field": "category"},
+                                    "size": {"value": 100},
+                                    "tooltip": {"signal": "{'Category': datum.category, 'Month': datum.label, 'Accidents': datum.count}"}
+                                },
+                                "update": {
+                                    "opacity": {"signal": "datum.category === selectedCategory ? 1 : 0.1"}
+                                    }
+                            }
+                        }
+                    ]
+                },
+                {
+                    "type": "rule",
+                    "encode": {
+                        "enter": {
+                            "x": {"scale": "xscale", "value": "March"},
+                            "y": {"value": 0},
+                            "y2": {"value": 400},
+                            "stroke": {"value": "gray"},
+                            "strokeWidth": {"value": 1},
+                            "strokeDash": {"value": [4, 4]}
+                        }
+                    }
+                },
+                {
+                    "type": "rule",
+                    "encode": {
+                        "enter": {
+                            "x": {"scale": "xscale", "value": "April"},
+                            "y": {"value": 0},
+                            "y2": {"value": 400},
+                            "stroke": {"value": "gray"},
+                            "strokeWidth": {"value": 1},
+                            "strokeDash": {"value": [4, 4]}
+                        }
+                    }
+                }
+            ]
+        };
+
+        const subVis2Spec = {
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 400,
+            "height": 300,
+            "padding": 1,
+            "data": [
+                {
+                    "name": "raw_data",
+                    "url": "https://raw.githubusercontent.com/sheriefAbdallah/CS318/refs/heads/main/Traffic_Incidents.csv",
+                    "format": {"type": "csv"}
+                },
+                {
+                    "name": "filtered_data",
+                    "source": "raw_data",
+                    "transform": [
+                        {
+                            "type": "filter",
+                            "expr": "datum.acci_time && year(timeParse(datum.acci_time, '%d/%m/%Y %H:%M:%S')) === 2024"
+                        },
+                        {
+                            "type": "formula",
+                            "as": "month",
+                            "expr": "month(timeParse(datum.acci_time, '%d/%m/%Y %H:%M:%S'))"
+                        },
+                        {
+                            "type": "formula",
+                            "as": "month_name",
+                            "expr": "datum.month === 2 ? 'March' : datum.month === 3 ? 'April' : datum.month === 5 ? 'June' : datum.month === 6 ? 'July' : datum.month === 7 ? 'August' : datum.month === 8 ? 'September' : null"
+                        },
+                        {
+                            "type": "formula",
+                            "as": "category",
+                            "expr": "indexof(datum.acci_name, 'بسيط') >= 0 ? 'بسيط' : indexof(datum.acci_name, 'بليغ') >= 0 ? 'بليغ' : datum.acci_name === 'مركبات مخالفة' ? 'مركبات مخالفة' : datum.acci_name === 'حريق مركبة أثناء سيرها' ? 'حريق مركبة أثناء سيرها' : datum.acci_name === 'عبور شخص أو عدة أشخاص من مكان غير مخصص لعبور المشا' ? 'عبور شخص أو عدة أشخاص من مكان غير مخصص لعبور المشا' : null"
+                        },
+                        {
+                            "type": "filter",
+                            "expr": "datum.month_name !== null"
+                        },
+                        {
+                            "type": "aggregate",
+                            "groupby": ["month_name", "category"],
+                            "ops": ["count"],
+                            "fields": ["acci_id"],
+                            "as": ["accident_count"]
+                        }
+                    ]
+                }
+            ],
+            "scales": [
+                {
+                    "name": "xscale",
+                    "type": "point",
+                    "domain": ["", "March", "April", "June", "July", "August", "September"],
+                    "range": "width"
+                },
+                {
+                    "name": "yscale",
+                    "type": "linear",
+                    "domain": {"data": "filtered_data", "field": "accident_count"},
+                    "range": "height",
+                    "nice": true
+                },
+                colorScale
+            ],
+            "axes": [
+                {
+                    "orient": "bottom",
+                    "scale": "xscale",
+                    "title": "Months (2024)",
+                    "domain": false,
+                    "labelAngle": 0,
+                    "tickColor": "#ccc"
+                },
+                {
+                    "orient": "left",
+                    "scale": "yscale",
+                    "title": "Accident Count"
+                }
+            ],
+            "marks": [
+                {
+                    "type": "group",
+                    "from": {
+                        "facet": {
+                            "name": "facet",
+                            "data": "filtered_data",
+                            "groupby": "category"
+                        }
+                    },
+                    "marks": [
+                        {
+                            "type": "line",
+                            "from": {"data": "facet"},
+                            "encode": {
+                                "enter": {
+                                    "x": {"scale": "xscale", "field": "month_name"},
+                                    "y": {"scale": "yscale", "field": "accident_count"},
+                                    "stroke": {"scale": "color", "field": "category"},
+                                    "strokeWidth": {"value": 2},
+                                    "opacity": {"value": 0.7}
+                                },
+                                "update": {
+                                    "opacity": {"signal": "datum.category === selectedCategory ? 1 : 0.1"}
+                                    }
+                            }
+                        },
+                        {
+                            "type": "symbol",
+                            "from": {"data": "facet"},
+                            "encode": {
+                                "enter": {
+                                    "x": {"scale": "xscale", "field": "month_name"},
+                                    "y": {"scale": "yscale", "field": "accident_count"},
+                                    "fill": {"scale": "color", "field": "category"},
+                                    "size": {"value": 50},
+                                    "tooltip": {
+                                        "signal": "{'Month': datum.month_name, 'Category': datum.category, 'Accident Count': datum.accident_count}"
+                                    }
+                                },
+                                "update": {
+                                    "opacity": {"signal": "datum.category === selectedCategory ? 1 : 0.1"}
+                                    }
+                            }
+                        }
+                    ]
+                },
+                {
+                    "type": "rule",
+                    "from": {"data": "filtered_data"},
+                    "encode": {
+                        "enter": {
+                            "x": {"scale": "xscale", "field": "month_name"},
+                            "y": {"value": 0},
+                            "y2": {"field": {"group": "height"}},
+                            "stroke": {"value": "gray"},
+                            "strokeWidth": {"value": 1},
+                            "strokeDash": {"value": [4, 4]}
+                        }
+                    }
+                }
+            ]
+        };
+
+        vegaEmbed('#main-vis', mainVisSpec).then(result => {
+    const view = result.view;
+    view.addSignalListener('selectedCategory', (name, value) => {
+        // Update the selectedCategory in subVis1Spec
+        subVis1Spec.signals = [
+            {
+                name: "selectedCategory",
+                value: value
+            }
+        ];
+
+        // Update the selectedCategory in subVis2Spec
+        subVis2Spec.signals = [
+            {
+                name: "selectedCategory",
+                value: value
+            }
+        ];
+
+        // Re-render the sub visualizations
+        vegaEmbed('#sub-vis-1', subVis1Spec, {renderer: 'svg'}).catch(console.error);
+        vegaEmbed('#sub-vis-2', subVis2Spec, {renderer: 'svg'}).catch(console.error);
+    });
+}).catch(console.error);
+
+    </script>
+</body>
+</html>
